@@ -16,6 +16,11 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[character]!));
 const findingIcon = (category: string) => category.includes("speed") ? "S" : category.includes("acceleration") ? "+" : category.includes("braking") ? "−" : category.includes("direction") || category.includes("wrong_way") ? "↻" : category.includes("road") ? "!" : "•";
+const directionBearing = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
+  const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
+  const deltaLon = (b.lon - a.lon) * Math.PI / 180;
+  return (Math.atan2(Math.sin(deltaLon) * Math.cos(lat2), Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon)) * 180 / Math.PI + 360) % 360;
+};
 function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; selected: Finding | null; onSelect: (finding: Finding) => void; cursorIndex: number | null }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const markers = React.useRef<Map<string, HTMLElement>>(new Map());
@@ -24,6 +29,14 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
   useEffect(() => {
     if (!ref.current || !trip.points?.length) return;
     const coords = trip.points.map((p) => [p.lon, p.lat] as [number, number]);
+    const arrowFeatures = trip.points.slice(1).flatMap((point, index) => {
+      const previous = trip.points![index];
+      const gap = point.time && previous.time ? (Date.parse(point.time) - Date.parse(previous.time)) / 1000 : 0;
+      if (gap > 15 * 60) return [];
+      return [{ type: "Feature" as const, properties: { bearing: directionBearing(previous, point) }, geometry: {
+        type: "Point" as const, coordinates: [(previous.lon + point.lon) / 2, (previous.lat + point.lat) / 2],
+      } }];
+    });
     const matchedSegments = trip.matched_segments?.length
       ? trip.matched_segments.map((segment) => segment.map((p) => [p.lon, p.lat] as [number, number]))
       : [(trip.matched_points || []).map((p) => [p.lon, p.lat] as [number, number])];
@@ -58,6 +71,19 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
           "line-dasharray": [2, 2],
         },
       });
+      map.addSource("track-points", { type: "geojson", data: { type: "FeatureCollection", features: trip.points!.map((point, index) => ({
+        type: "Feature", properties: { index }, geometry: { type: "Point", coordinates: [point.lon, point.lat] },
+      })) } });
+      map.addLayer({ id: "track-points", type: "circle", source: "track-points", paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 2, 14, 4],
+        "circle-color": "#22D3EE", "circle-stroke-color": "#07111f", "circle-stroke-width": 1,
+        "circle-opacity": 0.9,
+      } });
+      map.addSource("direction-arrows", { type: "geojson", data: { type: "FeatureCollection", features: arrowFeatures } });
+      map.addLayer({ id: "direction-arrows", type: "symbol", source: "direction-arrows", minzoom: 9, layout: {
+        "text-field": "➤", "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 14, 16],
+        "text-rotate": ["get", "bearing"], "text-rotation-alignment": "map", "text-allow-overlap": false,
+      }, paint: { "text-color": "#67E8F9", "text-halo-color": "#07111f", "text-halo-width": 1.5 } });
       if (referenceCoords.length > 1) {
         map.addSource("reference", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: referenceCoords } } });
         map.addLayer({ id: "reference", type: "line", source: "reference", paint: { "line-color": "#A78BFA", "line-width": 2, "line-opacity": 0.4, "line-dasharray": [2, 3] } });
@@ -66,6 +92,8 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
         map.addSource("matched", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: matchedSegments.filter((segment) => segment.length > 1) } } });
         map.addLayer({ id: "matched", type: "line", source: "matched", paint: { "line-color": "#60A5FA", "line-width": 5, "line-opacity": 0.95 } });
       }
+      map.moveLayer("track-points");
+      map.moveLayer("direction-arrows");
       const bounds = coords.reduce(
         (b, c) => b.extend(c),
         new maplibregl.LngLatBounds(coords[0], coords[0]),
@@ -456,6 +484,7 @@ function App() {
                 <MapView trip={active} selected={selected} onSelect={setSelected} cursorIndex={cursorIndex} />
                 <div className="legend">
                   <span className="raw">Recorded points</span>
+                  <span className="direction">Travel direction</span>
                   <span className="match">Road-snapped trace</span>
                   <span className="reference">Endpoint-only comparison</span>
                   <span className="anom">Anomaly</span>
