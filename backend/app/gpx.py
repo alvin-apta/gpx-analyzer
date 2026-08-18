@@ -18,6 +18,7 @@ class Point:
     speed_kmh: float | None = None
     location: str | None = None
     ignition: str | None = None
+    geofence: str | None = None
 
 def parse_vehicle_csv(data: bytes) -> tuple[str | None, list[Point]]:
     """Parse Indonesian vehicle-history CSV exports into chronological points."""
@@ -45,7 +46,9 @@ def parse_vehicle_csv(data: bytes) -> tuple[str | None, list[Point]]:
         raw_speed = (row.get("Kecepatan (Km/Jam)") or "").strip()
         try: speed = float(raw_speed) if raw_speed and raw_speed != "-" else None
         except ValueError: speed = None
-        points.append(Point(lat, lon, None, timestamp, 0, speed, (row.get("Lokasi") or "").strip() or None, (row.get("ACC") or "").strip() or None))
+        points.append(Point(lat, lon, None, timestamp, 0, speed, (row.get("Lokasi") or "").strip() or None,
+                            (row.get("ACC") or "").strip() or None,
+                            (row.get("Geolokasi") or "").strip() not in ("", "-") and (row.get("Geolokasi") or "").strip() or None))
     points.sort(key=lambda point: point.time or datetime.min.replace(tzinfo=timezone.utc))
     if len(points) < 2: raise ValueError("CSV track must contain at least two valid points")
     if len(points) > 250_000: raise ValueError("CSV exceeds the 250,000 point limit")
@@ -108,13 +111,13 @@ def angle_delta(a: float, b: float) -> float:
 def serialize(points: list[Point]) -> list[dict]:
     return [{"lat": p.lat, "lon": p.lon, "ele": p.ele,
              "time": p.time.isoformat() if p.time else None, "segment": p.segment,
-             "speed_kmh": p.speed_kmh, "location": p.location, "ignition": p.ignition}
+             "speed_kmh": p.speed_kmh, "location": p.location, "ignition": p.ignition, "geofence": p.geofence}
             for p in points]
 
 def deserialize(data: list[dict]) -> list[Point]:
     return [Point(p["lat"], p["lon"], p.get("ele"),
                   datetime.fromisoformat(p["time"]) if p.get("time") else None,
-                  p.get("segment", 0), p.get("speed_kmh"), p.get("location"), p.get("ignition")) for p in data]
+                  p.get("segment", 0), p.get("speed_kmh"), p.get("location"), p.get("ignition"), p.get("geofence")) for p in data]
 
 def decode_polyline(encoded: str | None, precision: int = 6) -> list[dict]:
     """Decode Valhalla's encoded polyline into latitude/longitude objects."""

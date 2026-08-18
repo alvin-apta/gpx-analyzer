@@ -9,6 +9,43 @@ PRESETS = {
     "foot": {"speed": 15, "accel": 2.0, "brake": -3.0, "turn": 145, "idle": 600},
 }
 
+def summarize_available_data(points: list[Point]) -> dict:
+    speeds = [point.speed_kmh for point in points if point.speed_kmh is not None]
+    ordered = sorted(speeds)
+    gaps, long_gap_s, sessions = [], 0.0, 1 if points else 0
+    for previous, point in zip(points, points[1:]):
+        gap = (point.time - previous.time).total_seconds() if point.time and previous.time else 0
+        gaps.append(gap)
+        if gap > 15 * 60: long_gap_s += gap; sessions += 1
+    stops, start = [], None
+    for index, point in enumerate(points):
+        stopped = point.speed_kmh is not None and point.speed_kmh <= 3
+        prior_gap = ((point.time - points[index-1].time).total_seconds()
+                     if index and point.time and points[index-1].time else 0)
+        if stopped and (start is None or prior_gap > 15 * 60): start = index
+        if start is not None and (not stopped or index == len(points) - 1 or prior_gap > 15 * 60):
+            end = index if stopped and index == len(points) - 1 else index - 1
+            duration = ((points[end].time - points[start].time).total_seconds()
+                        if end >= start and points[end].time and points[start].time else 0)
+            if end > start and duration >= 5 * 60:
+                stops.append({"start_index": start, "end_index": end, "duration_s": duration,
+                              "location": points[start].location, "acc_on": points[start].ignition == "Nyala"})
+            start = index if stopped and prior_gap > 15 * 60 else None
+    geofences = {}
+    for point in points:
+        if point.geofence: geofences[point.geofence] = geofences.get(point.geofence, 0) + 1
+    return {
+        "speed": {"average_kmh": sum(speeds) / len(speeds) if speeds else None,
+                  "median_kmh": median(speeds) if speeds else None,
+                  "p95_kmh": ordered[int(.95 * (len(ordered) - 1))] if ordered else None,
+                  "zero_speed_points": sum(value == 0 for value in speeds)},
+        "sampling": {"median_interval_s": median(gaps) if gaps else None,
+                     "long_gap_count": sum(gap > 15 * 60 for gap in gaps), "long_gap_s": long_gap_s},
+        "ignition": {"on_points": sum(point.ignition == "Nyala" for point in points),
+                     "off_points": sum(point.ignition == "Mati" for point in points)},
+        "activity_sessions": sessions, "stop_candidates": stops, "geofence_observations": geofences,
+    }
+
 def severity(ratio: float) -> str:
     return "critical" if ratio >= 1.8 else "high" if ratio >= 1.4 else "medium" if ratio >= 1.15 else "low"
 

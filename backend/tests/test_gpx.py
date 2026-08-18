@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from app.gpx import Point, parse_gpx, parse_vehicle_csv, basic_metrics
-from app.analysis import analyze
+from app.analysis import analyze, summarize_available_data
 
 def test_parse_and_analyze_sample():
     data = Path("samples/jakarta/mixed-car.gpx").read_bytes()
@@ -29,8 +29,8 @@ def test_missing_time_disables_speed_only():
 
 def test_parse_vehicle_history_csv_uses_reported_speed_and_sorts_time():
     data = """Tanggal,Plat Nomor,Jenis Kendaraan,Imei,Tipe Perangkat,Pengemudi,Garis Lintang,Garis Bujur,Lokasi,Geolokasi,Kecepatan (Km/Jam),ACC
-29 Jul 2026 10:05:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.2,106.8,Second,-,42.00,Nyala
-29 Jul 2026 10:00:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.21,106.79,First,-,20.00,Nyala
+29 Jul 2026 10:05:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.2,106.8,Second,Yard,42.00,Nyala
+29 Jul 2026 10:00:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.21,106.79,First,Yard,20.00,Nyala
 """.encode()
     name, points = parse_vehicle_csv(data)
     metrics = basic_metrics(points)
@@ -39,6 +39,9 @@ def test_parse_vehicle_history_csv_uses_reported_speed_and_sorts_time():
     assert points[0].time < points[1].time
     assert points[1].speed_kmh == 42
     assert metrics["max_speed_kmh"] == 42
+    summary = summarize_available_data(points)
+    assert summary["geofence_observations"] == {"Yard": 2}
+    assert summary["speed"]["average_kmh"] == 31
 
 def test_sparse_reversal_is_low_confidence_and_single_offset_is_suppressed():
     start = datetime(2026, 7, 29, tzinfo=timezone.utc)

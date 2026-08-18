@@ -14,6 +14,8 @@ from .gpx import parse_track, decode_polyline
 from .tasks import process_trip
 from .exports import csv_export, geojson_export, pdf_export
 from .providers import ollama_explain
+from .analysis import summarize_available_data
+from .gpx import deserialize
 
 app=FastAPI(title="GPX Inspector API",version="0.1.0")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:3000"],allow_methods=["*"],allow_headers=["*"])
@@ -31,6 +33,7 @@ def trip_dict(t, detail=False):
       "unit":f.unit,"title":f.title,"explanation":f.explanation,"evidence":f.evidence} for f in t.findings]}
     if detail:
         data["points"] = t.points_json
+        data["available_data_analysis"] = summarize_available_data(deserialize(t.points_json or []))
         matched = t.matched_json or {}
         # Interpolate sparse observations with road-following geometry, split at
         # long gaps. The frontend labels this as artificial/inferred movement.

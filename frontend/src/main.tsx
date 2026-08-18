@@ -463,6 +463,21 @@ function App() {
                 </small>
               </article>
             </section>
+            {active.available_data_analysis && (() => {
+              const data = active.available_data_analysis;
+              return <section className="available-analysis">
+                <div className="panelhead"><div><span className="eyebrow">AVAILABLE DATA ONLY</span><h2>Operational summary</h2></div><small>No driver intent inferred</small></div>
+                <div className="available-grid">
+                  <article><span>ACTIVITY SESSIONS</span><strong>{data.activity_sessions}</strong><small>Separated by gaps over 15 minutes</small></article>
+                  <article><span>SAMPLING GAPS</span><strong>{data.sampling.long_gap_count}</strong><small>{fmt(data.sampling.long_gap_s / 3600, " h")} without observations</small></article>
+                  <article><span>REPORTED SPEED</span><strong>{fmt(data.speed.average_kmh, " km/h")}</strong><small>Median {fmt(data.speed.median_kmh)} · P95 {fmt(data.speed.p95_kmh)}</small></article>
+                  <article><span>ACC OBSERVATIONS</span><strong>{data.ignition.on_points} on</strong><small>{data.ignition.off_points} off · {data.speed.zero_speed_points} zero-speed points</small></article>
+                  <article><span>STOP CANDIDATES</span><strong>{data.stop_candidates.length}</strong><small>At least two low-speed samples and five minutes</small></article>
+                  <article><span>GEOFENCE OBSERVATIONS</span><strong>{Object.values(data.geofence_observations).reduce((sum, count) => sum + count, 0)}</strong><small>{Object.entries(data.geofence_observations).map(([name, count]) => `${name}: ${count}`).join(" · ") || "No named geofence data"}</small></article>
+                </div>
+                {data.stop_candidates.length > 0 && <div className="stop-list">{data.stop_candidates.map((stop) => <button key={`${stop.start_index}-${stop.end_index}`} onClick={() => setCursorIndex(stop.start_index)}><b>{fmt(stop.duration_s / 60, " min")}</b><span>{stop.location || "Unknown location"}</span><small>{stop.acc_on ? "ACC on — possible idling" : "ACC off"}</small></button>)}</div>}
+              </section>;
+            })()}
             {active.error && <div className="warning">⚠ {active.error}</div>}
             <section className="workspace">
               <div className="mapwrap">
