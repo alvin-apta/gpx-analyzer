@@ -376,6 +376,16 @@ function App() {
             </label>
           </div>
         </header>
+        <div className="mobile-trips">
+          <label htmlFor="mobile-trip-select">Recent analysis</label>
+          <select id="mobile-trip-select" value={active?.id || ""} onChange={(event) => {
+            const trip = trips.find((item) => item.id === event.target.value);
+            if (trip) open(trip);
+          }}>
+            <option value="" disabled>Select a saved track</option>
+            {trips.map((trip) => <option value={trip.id} key={trip.id}>{trip.name} — {trip.mode}</option>)}
+          </select>
+        </div>
         {!active ? (
           <section className="empty">
             <img src={logo} />
