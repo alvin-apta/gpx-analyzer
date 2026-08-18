@@ -33,7 +33,8 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
       const previous = trip.points![index];
       const gap = point.time && previous.time ? (Date.parse(point.time) - Date.parse(previous.time)) / 1000 : 0;
       if (gap > 15 * 60) return [];
-      return [{ type: "Feature" as const, properties: { bearing: directionBearing(previous, point) }, geometry: {
+      // Map bearings use 0° = north; the arrow glyph points east at 0°.
+      return [{ type: "Feature" as const, properties: { bearing: directionBearing(previous, point) - 90 }, geometry: {
         type: "Point" as const, coordinates: [(previous.lon + point.lon) / 2, (previous.lat + point.lat) / 2],
       } }];
     });
