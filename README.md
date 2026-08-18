@@ -39,6 +39,8 @@ flowchart LR
 
 Current detectors cover implausible speed, sudden acceleration/braking, heading changes, mapped speed-limit exceedance, and sustained road offset when provider attribution is available. Sparse multi-minute direction reversals are marked low-confidence for route review, and off-road findings require consecutive moving points beyond a conservative offset threshold. The API data model also preserves evidence and confidence for extending wrong-way, mode-access, stop, and detour rules. Results are analytical indicators, not legal proof.
 
+The blue map overlay connects Valhalla's nearest-road coordinate for each observation, split at long sampling gaps. It intentionally follows the recorded trace closely instead of presenting an uncertain full route between sparse observations.
+
 ## Privacy and external services
 
 Uploaded files, results, and local routing data persist in Docker volumes until deleted. Coordinates remain local when using the default Valhalla container; `VALHALLA_URL` can override it with another service. The background visual map still uses the configurable OpenFreeMap dark style with visible provider attribution. Qwen receives aggregate metrics and finding summaries, not raw point arrays.

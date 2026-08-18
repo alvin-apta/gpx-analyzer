@@ -21,7 +21,7 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
         gap = (point.time - previous.time).total_seconds() if previous and point.time and previous.time else 0
         if previous and gap > 15 * 60: groups.append([])
         groups[-1].append(point)
-    segments, edges, offsets, limits, total_distance = [], [], [], [], 0.0
+    segments, snapped_segments, edges, offsets, limits, total_distance = [], [], [], [], [], 0.0
     try:
         async with httpx.AsyncClient(timeout=90) as client:
           for group in groups:
@@ -42,6 +42,9 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
             response.raise_for_status(); data = response.json()
             if data.get("shape"): segments.append(data["shape"])
             matched = data.get("matched_points", [])
+            snapped = [{"lat": point["lat"], "lon": point["lon"]} for point in matched
+                       if point.get("lat") is not None and point.get("lon") is not None]
+            if len(snapped) > 1: snapped_segments.append(snapped)
             group_offsets = [p.get("distance_from_trace_point") for p in matched]
             offsets.extend((group_offsets + [None] * len(group))[:len(group)])
             for edge in data.get("edges", []):
@@ -53,7 +56,7 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
     if not segments:
         raise RuntimeError("Valhalla could not match any continuous portion of this track")
     valid_offsets = [value for value in offsets if value is not None]
-    return {"segments": segments, "edges": edges, "offsets": offsets, "speed_limits": limits,
+    return {"segments": segments, "snapped_segments": snapped_segments, "edges": edges, "offsets": offsets, "speed_limits": limits,
             "distance_m": total_distance,
             "quality": max(0, 1 - (sum(valid_offsets) / max(len(valid_offsets), 1)) / 100)}
 

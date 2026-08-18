@@ -456,7 +456,7 @@ function App() {
                 <MapView trip={active} selected={selected} onSelect={setSelected} cursorIndex={cursorIndex} />
                 <div className="legend">
                   <span className="raw">Recorded points</span>
-                  <span className="match">Matched road</span>
+                  <span className="match">Road-snapped trace</span>
                   <span className="reference">Endpoint-only comparison</span>
                   <span className="anom">Anomaly</span>
                 </div>
