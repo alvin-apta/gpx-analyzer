@@ -1,0 +1,15 @@
+[project]
+name = "gpx-inspector-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.12",
+  "pydantic-settings>=2.5", "sqlalchemy>=2.0", "psycopg[binary]>=3.2",
+  "redis>=5.1", "rq>=2.0", "httpx>=0.27", "defusedxml>=0.7",
+  "pyproj>=3.7", "reportlab>=4.2"
+]
+[project.optional-dependencies]
+test = ["pytest>=8.3", "pytest-asyncio>=0.24"]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

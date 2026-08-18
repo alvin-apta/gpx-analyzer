@@ -1,0 +1,1 @@
+{"scripts":{"dev":"vite","build":"tsc -b && vite build","test":"vitest run"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","typescript":"latest","react":"latest","react-dom":"latest","maplibre-gl":"^5.6.1","echarts":"^5.6.0"},"devDependencies":{"@types/react":"latest","@types/react-dom":"latest","vitest":"latest"}}
