@@ -32,9 +32,9 @@ def trip_dict(t, detail=False):
     if detail:
         data["points"] = t.points_json
         matched = t.matched_json or {}
-        # Render Valhalla road geometry for each independently matched time segment.
-        # Snapped observation points remain a fallback for older/incomplete results.
-        data["matched_segments"] = [decode_polyline(encoded) for encoded in matched.get("segments", [])] or matched.get("snapped_segments", [])
+        # Show only observed positions moved to their nearest mapped road. This
+        # avoids presenting an inferred route between sparse observations.
+        data["matched_segments"] = matched.get("snapped_segments") or [decode_polyline(encoded) for encoded in matched.get("segments", [])]
         data["matched_points"] = [point for segment in data["matched_segments"] for point in segment] or decode_polyline(matched.get("encoded"))
         data["reference_points"] = decode_polyline((t.reference_json or {}).get("encoded"))
     return data

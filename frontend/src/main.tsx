@@ -43,7 +43,6 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
         } }];
       });
     });
-    const referenceCoords = (trip.reference_points || []).map((p) => [p.lon, p.lat] as [number, number]);
     const map = new maplibregl.Map({
       container: ref.current,
       style:
@@ -87,10 +86,6 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
         "text-field": "➤", "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 14, 16],
         "text-rotate": ["get", "bearing"], "text-rotation-alignment": "map", "text-allow-overlap": false,
       }, paint: { "text-color": "#67E8F9", "text-halo-color": "#07111f", "text-halo-width": 1.5 } });
-      if (referenceCoords.length > 1) {
-        map.addSource("reference", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: referenceCoords } } });
-        map.addLayer({ id: "reference", type: "line", source: "reference", paint: { "line-color": "#A78BFA", "line-width": 2, "line-opacity": 0.4, "line-dasharray": [2, 3] } });
-      }
       if (matchedSegments.some((segment) => segment.length > 1)) {
         map.addSource("matched", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: matchedSegments.filter((segment) => segment.length > 1) } } });
         map.addLayer({ id: "matched", type: "line", source: "matched", paint: { "line-color": "#60A5FA", "line-width": 5, "line-opacity": 0.95 } });
@@ -446,13 +441,9 @@ function App() {
                 <small>Geodesic track</small>
               </article>
               <article>
-                <span>MATCHED DISTANCE</span>
-                <strong>
-                  {active.matched_distance_m
-                    ? fmt(active.matched_distance_m / 1000, " km")
-                    : "Unavailable"}
-                </strong>
-                <small>OSM road network</small>
+                <span>ROAD SNAPS</span>
+                <strong>{active.matched_points?.length || 0} / {active.point_count}</strong>
+                <small>Recorded points placed on nearest roads</small>
               </article>
               <article>
                 <span>MAXIMUM SPEED</span>
@@ -471,15 +462,6 @@ function App() {
                   high priority
                 </small>
               </article>
-              <article>
-                <span>REFERENCE ROUTE</span>
-                <strong>
-                  {active.route_distance_m
-                    ? fmt(active.route_distance_m / 1000, " km")
-                    : "Unavailable"}
-                </strong>
-                <small>OSM endpoint route</small>
-              </article>
             </section>
             {active.error && <div className="warning">⚠ {active.error}</div>}
             <section className="workspace">
@@ -488,8 +470,7 @@ function App() {
                 <div className="legend">
                   <span className="raw">Recorded points</span>
                   <span className="direction">Travel direction</span>
-                  <span className="match">Road-matched route</span>
-                  <span className="reference">Endpoint-only comparison</span>
+                  <span className="match">Nearest-road observations</span>
                   <span className="anom">Anomaly</span>
                 </div>
               </div>
