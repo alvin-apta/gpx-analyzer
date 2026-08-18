@@ -470,9 +470,10 @@ function App() {
                 <div className="legend">
                   <span className="raw">Recorded points</span>
                   <span className="direction">Travel direction</span>
-                  <span className="match">Nearest-road observations</span>
+                  <span className="match">Artificial road interpolation</span>
                   <span className="anom">Anomaly</span>
                 </div>
+                <div className="mapnote">Solid cyan points are recorded evidence. The blue road line and its arrows are an artificial interpolation between observations, not continuously recorded GPS.</div>
               </div>
               <div className="findings">
                 <div className="panelhead">

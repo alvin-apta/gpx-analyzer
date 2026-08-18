@@ -32,10 +32,10 @@ def trip_dict(t, detail=False):
     if detail:
         data["points"] = t.points_json
         matched = t.matched_json or {}
-        # Show only observed positions moved to their nearest mapped road. This
-        # avoids presenting an inferred route between sparse observations.
-        data["matched_segments"] = matched.get("snapped_segments") or [decode_polyline(encoded) for encoded in matched.get("segments", [])]
-        data["matched_points"] = [point for segment in data["matched_segments"] for point in segment] or decode_polyline(matched.get("encoded"))
+        # Interpolate sparse observations with road-following geometry, split at
+        # long gaps. The frontend labels this as artificial/inferred movement.
+        data["matched_segments"] = [decode_polyline(encoded) for encoded in matched.get("segments", [])] or matched.get("snapped_segments", [])
+        data["matched_points"] = [point for segment in matched.get("snapped_segments", []) for point in segment] or decode_polyline(matched.get("encoded"))
         data["reference_points"] = decode_polyline((t.reference_json or {}).get("encoded"))
     return data
 
