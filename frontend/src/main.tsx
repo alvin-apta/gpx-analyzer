@@ -29,18 +29,20 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
   useEffect(() => {
     if (!ref.current || !trip.points?.length) return;
     const coords = trip.points.map((p) => [p.lon, p.lat] as [number, number]);
-    const arrowFeatures = trip.points.slice(1).flatMap((point, index) => {
-      const previous = trip.points![index];
-      const gap = point.time && previous.time ? (Date.parse(point.time) - Date.parse(previous.time)) / 1000 : 0;
-      if (gap > 15 * 60) return [];
-      // Map bearings use 0° = north; the arrow glyph points east at 0°.
-      return [{ type: "Feature" as const, properties: { bearing: directionBearing(previous, point) - 90 }, geometry: {
-        type: "Point" as const, coordinates: [(previous.lon + point.lon) / 2, (previous.lat + point.lat) / 2],
-      } }];
-    });
     const matchedSegments = trip.matched_segments?.length
       ? trip.matched_segments.map((segment) => segment.map((p) => [p.lon, p.lat] as [number, number]))
       : [(trip.matched_points || []).map((p) => [p.lon, p.lat] as [number, number])];
+    const arrowFeatures = matchedSegments.flatMap((segment) => {
+      const spacing = Math.max(1, Math.ceil(segment.length / 18));
+      return segment.slice(1).flatMap((point, index) => {
+        if (index % spacing) return [];
+        const previous = segment[index];
+        const bearing = directionBearing({ lon: previous[0], lat: previous[1] }, { lon: point[0], lat: point[1] });
+        return [{ type: "Feature" as const, properties: { bearing: bearing - 90 }, geometry: {
+          type: "Point" as const, coordinates: [(previous[0] + point[0]) / 2, (previous[1] + point[1]) / 2],
+        } }];
+      });
+    });
     const referenceCoords = (trip.reference_points || []).map((p) => [p.lon, p.lat] as [number, number]);
     const map = new maplibregl.Map({
       container: ref.current,
@@ -486,7 +488,7 @@ function App() {
                 <div className="legend">
                   <span className="raw">Recorded points</span>
                   <span className="direction">Travel direction</span>
-                  <span className="match">Road-snapped trace</span>
+                  <span className="match">Road-matched route</span>
                   <span className="reference">Endpoint-only comparison</span>
                   <span className="anom">Anomaly</span>
                 </div>
