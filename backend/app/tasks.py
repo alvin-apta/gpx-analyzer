@@ -27,6 +27,7 @@ def process_trip(trip_id: str):
                 trip.match_quality = match["quality"]
                 # Shape is stored encoded; raw points remain usable if decoding is unavailable.
                 trip.matched_json = {"segments": match.get("segments", []),
+                                     "interpolated_segments": match.get("interpolated_segments", []),
                                      "snapped_segments": match.get("snapped_segments", [])}
                 reference = asyncio.run(valhalla_reference(points, trip.mode))
                 trip.route_distance_m = reference["distance_m"]

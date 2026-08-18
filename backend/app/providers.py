@@ -21,7 +21,7 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
         gap = (point.time - previous.time).total_seconds() if previous and point.time and previous.time else 0
         if previous and gap > 15 * 60: groups.append([])
         groups[-1].append(point)
-    segments, snapped_segments, edges, offsets, limits, total_distance = [], [], [], [], [], 0.0
+    segments, interpolated_segments, snapped_segments, edges, offsets, limits, total_distance = [], [], [], [], [], [], 0.0
     try:
         async with httpx.AsyncClient(timeout=90) as client:
           for group in groups:
@@ -52,11 +52,22 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
                 normalized = {**edge, "name": names[0] if names else None, "wrong_way": False}
                 edges.append(normalized); limits.append(edge.get("speed_limit"))
                 total_distance += (edge.get("length") or 0) * 1000
+          # Route every observed pair independently. This deliberately includes
+          # points around long gaps while preventing one bad pair from changing
+          # the geometry selected for all other observations.
+          for start, end in zip(points, points[1:]):
+            route_payload = {"locations": [{"lat": start.lat, "lon": start.lon}, {"lat": end.lat, "lon": end.lon}],
+                             "costing": COSTING[mode], "units": "kilometers"}
+            route_response = await client.post(f"{settings.valhalla_url.rstrip('/')}/route", json=route_payload)
+            if route_response.status_code != 200: continue
+            legs = route_response.json().get("trip", {}).get("legs", [])
+            if legs and legs[0].get("shape"): interpolated_segments.append(legs[0]["shape"])
     except httpx.HTTPError as exc: raise provider_error(exc) from exc
     if not segments:
         raise RuntimeError("Valhalla could not match any continuous portion of this track")
     valid_offsets = [value for value in offsets if value is not None]
-    return {"segments": segments, "snapped_segments": snapped_segments, "edges": edges, "offsets": offsets, "speed_limits": limits,
+    return {"segments": segments, "interpolated_segments": interpolated_segments,
+            "snapped_segments": snapped_segments, "edges": edges, "offsets": offsets, "speed_limits": limits,
             "distance_m": total_distance,
             "quality": max(0, 1 - (sum(valid_offsets) / max(len(valid_offsets), 1)) / 100)}
 

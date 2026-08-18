@@ -473,7 +473,7 @@ function App() {
                   <span className="match">Artificial road interpolation</span>
                   <span className="anom">Anomaly</span>
                 </div>
-                <div className="mapnote">Solid cyan points are recorded evidence. The blue road line and its arrows are an artificial interpolation between observations, not continuously recorded GPS.</div>
+                <div className="mapnote">Solid cyan points are recorded evidence. Each consecutive pair—including pairs around long gaps—is independently routed into the artificial blue interpolation.</div>
               </div>
               <div className="findings">
                 <div className="panelhead">
