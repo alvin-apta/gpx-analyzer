@@ -12,6 +12,7 @@ def process_trip(trip_id: str):
         if not trip: return
         trip.status = "processing"; db.commit()
         try:
+            trip.error = None
             data = open(trip.source_path, "rb").read()
             _, points = parse_track(data, trip.source_path); metrics = basic_metrics(points)
             trip.points_json = serialize(points); trip.point_count = len(points)

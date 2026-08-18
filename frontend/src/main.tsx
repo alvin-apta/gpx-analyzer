@@ -346,7 +346,7 @@ function App() {
             <section className="settingsgrid">
               <article><span className="eyebrow">ANALYSIS API</span><h2>{health?.status === "ok" ? "Online" : "Unavailable"}</h2><p>Host endpoint: http://localhost:8010</p></article>
               <article><span className="eyebrow">LOCAL EXPLANATION MODEL</span><h2>{health?.model || "qwen3:14b"}</h2><p>Existing host Ollama; no model installation is performed.</p></article>
-              <article><span className="eyebrow">MAP MATCHING</span><h2>Hosted Valhalla</h2><p>Track coordinates leave this machine for OSM road matching.</p></article>
+              <article><span className="eyebrow">MAP MATCHING</span><h2>Local Valhalla</h2><p>Sumatra OpenStreetMap routing data is downloaded once and retained in Docker storage.</p></article>
               <article><span className="eyebrow">RULE PRESETS</span><h2>Fixed and versioned</h2><p>Car, motorcycle, bicycle, and pedestrian modes are supported.</p></article>
             </section>
           </>

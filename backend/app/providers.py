@@ -5,6 +5,13 @@ from .gpx import Point
 
 COSTING = {"car": "auto", "motorcycle": "motorcycle", "bicycle": "bicycle", "foot": "pedestrian"}
 
+def provider_error(exc: Exception) -> RuntimeError:
+    if isinstance(exc, httpx.TimeoutException):
+        return RuntimeError(f"Valhalla timed out while contacting {exc.request.url}")
+    if isinstance(exc, httpx.HTTPStatusError):
+        return RuntimeError(f"Valhalla returned HTTP {exc.response.status_code} from {exc.request.url}")
+    return RuntimeError(f"Valhalla request failed: {type(exc).__name__}: {exc}")
+
 async def valhalla_match(points: list[Point], mode: str) -> dict:
     # Keep payload modest for public/demo endpoints while preserving endpoints.
     step = max(1, len(points) // 800)
@@ -15,9 +22,11 @@ async def valhalla_match(points: list[Point], mode: str) -> dict:
       "filters": {"action": "include", "attributes": ["shape", "edge.length", "edge.names", "edge.speed_limit",
       "edge.traversability", "edge.forward", "edge.way_id", "edge.begin_shape_index", "edge.end_shape_index",
       "matched.point", "matched.distance_from_trace_point"]}}
-    async with httpx.AsyncClient(timeout=45) as client:
-        response = await client.post(f"{settings.valhalla_url.rstrip('/')}/trace_attributes", json=payload)
-        response.raise_for_status(); data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            response = await client.post(f"{settings.valhalla_url.rstrip('/')}/trace_attributes", json=payload)
+            response.raise_for_status(); data = response.json()
+    except httpx.HTTPError as exc: raise provider_error(exc) from exc
     matched = data.get("matched_points", [])
     offsets = [p.get("distance_from_trace_point") for p in matched]
     edges = []
@@ -33,9 +42,11 @@ async def valhalla_reference(points: list[Point], mode: str) -> dict:
     payload = {"locations": [{"lat": points[0].lat, "lon": points[0].lon},
                              {"lat": points[-1].lat, "lon": points[-1].lon}],
                "costing": COSTING[mode], "units": "kilometers"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(f"{settings.valhalla_url.rstrip('/')}/route", json=payload)
-        response.raise_for_status(); data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(f"{settings.valhalla_url.rstrip('/')}/route", json=payload)
+            response.raise_for_status(); data = response.json()
+    except httpx.HTTPError as exc: raise provider_error(exc) from exc
     trip = data.get("trip", {}); legs = trip.get("legs", [])
     return {"distance_m": (trip.get("summary", {}).get("length") or 0) * 1000,
             "encoded": legs[0].get("shape") if legs else None}

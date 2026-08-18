@@ -20,13 +20,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    restart: unless-stopped
+    environment:
+      tile_urls: https://download.geofabrik.de/asia/indonesia/sumatra-latest.osm.pbf
+      use_tiles_ignore_pbf: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      build_elevation: "False"
+      server_threads: "2"
+    volumes: [gpx-valhalla:/custom_files]
+    ports: ["8020:8002"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 180
+      start_period: 30s
   api:
     build: ./backend
     restart: unless-stopped
     environment: &app-env
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://gpx:gpx@db:5432/gpx}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      VALHALLA_URL: ${VALHALLA_URL:-https://valhalla1.openstreetmap.de}
+      VALHALLA_URL: ${VALHALLA_URL:-http://valhalla:8002}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/v1}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:14b}
       UPLOAD_DIR: /data/uploads
@@ -46,6 +64,7 @@ services:
     depends_on:
       db: {condition: service_healthy}
       redis: {condition: service_healthy}
+      valhalla: {condition: service_healthy}
   web:
     build:
       context: ./frontend
@@ -57,3 +76,4 @@ services:
 volumes:
   gpx-db:
   gpx-uploads:
+  gpx-valhalla:

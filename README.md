@@ -17,7 +17,9 @@ container failure or Docker Desktop restart, unless you explicitly stop them.
 Enable **Start Docker Desktop when you sign in** in Docker Desktop settings if
 the stack should return automatically after rebooting Windows.
 
-Open <http://localhost:3010>. The API documentation is at <http://localhost:8010/docs>.
+Open <http://localhost:3010>. The API documentation is at <http://localhost:8010/docs>, and the local Valhalla status endpoint is at <http://localhost:8020/status>.
+
+On its first start, the `valhalla` service downloads Geofabrik's Sumatra OSM PBF and builds a local routing graph. The source download is roughly 269 MB and graph generation can take significant time depending on CPU and disk speed. Both are retained in the `gpx-valhalla` Docker volume and reused after restarts. Follow progress with `docker compose logs -f valhalla`.
 
 No `.env` file is required. Copy `.env.example` to `.env` only to override defaults. The app never installs Ollama or downloads a model. From Docker it connects to the host service at `http://host.docker.internal:11434/v1` and enables explanations only when the exact `qwen3:14b` tag is returned by `/v1/models`.
 
@@ -27,7 +29,7 @@ No `.env` file is required. Copy `.env.example` to `.env` only to override defau
 flowchart LR
   A[GPX or vehicle CSV upload] --> B[Secure parse and normalize]
   B --> C[Raw distance, speed, bearing]
-  B --> D[Hosted Valhalla map match]
+  B --> D[Local Valhalla + Sumatra OSM map match]
   C --> E[Deterministic anomaly rules]
   D --> E
   E --> F[Dark map and evidence timeline]
@@ -39,7 +41,7 @@ Current detectors cover implausible speed, sudden acceleration/braking, sudden h
 
 ## Privacy and external services
 
-Uploaded files and results persist in local Docker volumes until deleted. Coordinates are sent automatically to the configured Valhalla endpoint for map matching. The default community endpoint is best-effort and can be changed with `VALHALLA_URL`. The map uses the configurable OpenFreeMap dark style with visible provider attribution. Qwen receives aggregate metrics and finding summaries, not raw GPX point arrays.
+Uploaded files, results, and local routing data persist in Docker volumes until deleted. Coordinates remain local when using the default Valhalla container; `VALHALLA_URL` can override it with another service. The background visual map still uses the configurable OpenFreeMap dark style with visible provider attribution. Qwen receives aggregate metrics and finding summaries, not raw point arrays.
 
 ## Demo data and exports
 
