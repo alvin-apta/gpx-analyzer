@@ -1,5 +1,6 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from app.gpx import parse_gpx, parse_vehicle_csv, basic_metrics
+from app.gpx import Point, parse_gpx, parse_vehicle_csv, basic_metrics
 from app.analysis import analyze
 
 def test_parse_and_analyze_sample():
@@ -38,3 +39,16 @@ def test_parse_vehicle_history_csv_uses_reported_speed_and_sorts_time():
     assert points[0].time < points[1].time
     assert points[1].speed_kmh == 42
     assert metrics["max_speed_kmh"] == 42
+
+def test_sparse_reversal_is_low_confidence_and_single_offset_is_suppressed():
+    start = datetime(2026, 7, 29, tzinfo=timezone.utc)
+    points = [
+        Point(0, 0, None, start, 0, 20),
+        Point(0, .01, None, start + timedelta(minutes=5), 0, 20),
+        Point(0, 0, None, start + timedelta(minutes=10), 0, 20),
+    ]
+    findings = analyze(points, "car", {"offsets": [0, 100, 0], "edges": [], "speed_limits": []})
+    reversal = next(item for item in findings if item["category"] == "direction_reversal")
+    assert reversal["severity"] == "low"
+    assert reversal["confidence"] < .5
+    assert not any(item["category"] == "off_road" for item in findings)

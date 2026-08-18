@@ -13,30 +13,49 @@ def provider_error(exc: Exception) -> RuntimeError:
     return RuntimeError(f"Valhalla request failed: {type(exc).__name__}: {exc}")
 
 async def valhalla_match(points: list[Point], mode: str) -> dict:
-    # Keep payload modest for public/demo endpoints while preserving endpoints.
-    step = max(1, len(points) // 800)
-    sampled = points[::step]
-    if sampled[-1] is not points[-1]: sampled.append(points[-1])
-    shape = [{"lat": p.lat, "lon": p.lon, **({"time": int(p.time.timestamp())} if p.time else {})} for p in sampled]
-    payload = {"shape": shape, "costing": COSTING[mode], "shape_match": "map_snap", "units": "kilometers",
-      "filters": {"action": "include", "attributes": ["shape", "edge.length", "edge.names", "edge.speed_limit",
-      "edge.traversability", "edge.forward", "edge.way_id", "edge.begin_shape_index", "edge.end_shape_index",
-      "matched.point", "matched.distance_from_trace_point"]}}
+    # A vehicle-history file can contain hours with no observations. Treat those
+    # as separate traces instead of inventing a route through the missing period.
+    groups: list[list[Point]] = [[]]
+    for point in points:
+        previous = groups[-1][-1] if groups[-1] else None
+        gap = (point.time - previous.time).total_seconds() if previous and point.time and previous.time else 0
+        if previous and gap > 15 * 60: groups.append([])
+        groups[-1].append(point)
+    segments, edges, offsets, limits, total_distance = [], [], [], [], 0.0
     try:
         async with httpx.AsyncClient(timeout=90) as client:
+          for group in groups:
+            if len(group) < 2:
+                offsets.extend([None] * len(group)); continue
+            step = max(1, len(group) // 800)
+            sampled = group[::step]
+            if sampled[-1] is not group[-1]: sampled.append(group[-1])
+            shape = [{"lat": p.lat, "lon": p.lon, **({"time": int(p.time.timestamp())} if p.time else {})} for p in sampled]
+            payload = {"shape": shape, "costing": COSTING[mode], "shape_match": "map_snap", "units": "kilometers",
+              "filters": {"action": "include", "attributes": ["shape", "edge.length", "edge.names", "edge.speed_limit",
+              "edge.traversability", "edge.forward", "edge.way_id", "edge.begin_shape_index", "edge.end_shape_index",
+              "matched.point", "matched.distance_from_trace_point"]}}
             response = await client.post(f"{settings.valhalla_url.rstrip('/')}/trace_attributes", json=payload)
+            if response.status_code == 400:
+                offsets.extend([None] * len(group))
+                continue
             response.raise_for_status(); data = response.json()
+            if data.get("shape"): segments.append(data["shape"])
+            matched = data.get("matched_points", [])
+            group_offsets = [p.get("distance_from_trace_point") for p in matched]
+            offsets.extend((group_offsets + [None] * len(group))[:len(group)])
+            for edge in data.get("edges", []):
+                names = edge.get("names") or []
+                normalized = {**edge, "name": names[0] if names else None, "wrong_way": False}
+                edges.append(normalized); limits.append(edge.get("speed_limit"))
+                total_distance += (edge.get("length") or 0) * 1000
     except httpx.HTTPError as exc: raise provider_error(exc) from exc
-    matched = data.get("matched_points", [])
-    offsets = [p.get("distance_from_trace_point") for p in matched]
-    edges = []
-    for e in data.get("edges", []):
-        names = e.get("names") or []
-        edges.append({**e, "name": names[0] if names else None, "wrong_way": False})
-    return {"shape": data.get("shape"), "edges": edges, "offsets": offsets,
-            "speed_limits": [e.get("speed_limit") for e in edges],
-            "distance_m": sum((e.get("length") or 0) * 1000 for e in edges),
-            "quality": max(0, 1 - (sum(o or 0 for o in offsets) / max(len(offsets), 1)) / 100)}
+    if not segments:
+        raise RuntimeError("Valhalla could not match any continuous portion of this track")
+    valid_offsets = [value for value in offsets if value is not None]
+    return {"segments": segments, "edges": edges, "offsets": offsets, "speed_limits": limits,
+            "distance_m": total_distance,
+            "quality": max(0, 1 - (sum(valid_offsets) / max(len(valid_offsets), 1)) / 100)}
 
 async def valhalla_reference(points: list[Point], mode: str) -> dict:
     payload = {"locations": [{"lat": points[0].lat, "lon": points[0].lon},

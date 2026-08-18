@@ -12,10 +12,10 @@ PRESETS = {
 def severity(ratio: float) -> str:
     return "critical" if ratio >= 1.8 else "high" if ratio >= 1.4 else "medium" if ratio >= 1.15 else "low"
 
-def finding(category, index, measured, threshold, unit, title, explanation, confidence=.85, span=1, evidence=None):
+def finding(category, index, measured, threshold, unit, title, explanation, confidence=.85, span=1, evidence=None, severity_override=None):
     return {"category": category, "start_index": index, "end_index": index + span,
             "measured_value": round(measured, 2), "threshold": threshold, "unit": unit,
-            "severity": severity(abs(measured) / max(abs(threshold), .01)), "confidence": confidence,
+            "severity": severity_override or severity(abs(measured) / max(abs(threshold), .01)), "confidence": confidence,
             "title": title, "explanation": explanation, "evidence": evidence or {}}
 
 def analyze(points: list[Point], mode: str, match: dict | None = None) -> list[dict]:
@@ -38,15 +38,27 @@ def analyze(points: list[Point], mode: str, match: dict | None = None) -> list[d
     for i in range(1, len(m["headings"])):
         turn = angle_delta(m["headings"][i-1], m["headings"][i])
         if turn > preset["turn"] and (speeds[i] or 0) > (8 if mode in ("car", "motorcycle") else 3):
-            results.append(finding("sudden_direction_change", i, turn, preset["turn"], "degrees",
-                "Sudden direction change", "The track heading changed sharply while still moving.", .72))
+            before = (points[i].time - points[i-1].time).total_seconds() if points[i].time and points[i-1].time else None
+            after = (points[i+1].time - points[i].time).total_seconds() if points[i+1].time and points[i].time else None
+            sparse = before is None or after is None or max(before, after) > 60
+            results.append(finding("direction_reversal" if sparse else "sudden_direction_change", i, turn,
+                150 if sparse else preset["turn"], "degrees",
+                "Direction reversal — review route" if sparse else "Sudden direction change",
+                "The sampled path reverses direction, but the multi-minute gap cannot show whether this was abrupt, required by the route, or a GPS artifact."
+                if sparse else "Closely spaced track points show a sharp heading change while moving.",
+                .45 if sparse else .72, evidence={"sample_gap_before_s": before, "sample_gap_after_s": after},
+                severity_override="low" if sparse else None))
     if match:
         offsets = match.get("offsets", [])
+        threshold = 75 if mode in ("car", "motorcycle") else 50
         for i, value in enumerate(offsets):
-            threshold = 35 if mode in ("car", "motorcycle") else 25
-            if value is not None and value > threshold:
-                results.append(finding("off_road", i, value, threshold, "m", "Possible off-road movement",
-                    "This point is farther from the matched network than the mode preset permits.", .7))
+            adjacent_offset = any(0 <= j < len(offsets) and offsets[j] is not None and offsets[j] > threshold
+                                  for j in (i - 1, i + 1))
+            moving = i < len(points) and (points[i].speed_kmh is None or points[i].speed_kmh > 5)
+            if value is not None and value > threshold and adjacent_offset and moving:
+                results.append(finding("off_road", i, value, threshold, "m", "Sustained road offset — review",
+                    "Consecutive moving samples are offset from the mapped road. GPS accuracy, private access roads, and incomplete OSM data remain possible explanations.",
+                    .6, severity_override="low"))
         for edge in match.get("edges", []):
             if edge.get("traversability") in ("forward", "backward") and edge.get("wrong_way"):
                 idx = edge.get("begin_shape_index", 0)

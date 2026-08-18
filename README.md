@@ -37,7 +37,7 @@ flowchart LR
   E -. summarized findings only .-> H[Existing Ollama qwen3:14b]
 ```
 
-Current detectors cover implausible speed, sudden acceleration/braking, sudden heading changes, mapped speed-limit exceedance, and road offset when provider attribution is available. The API data model also preserves evidence and confidence for extending wrong-way, mode-access, stop, and detour rules. Results are analytical indicators, not legal proof.
+Current detectors cover implausible speed, sudden acceleration/braking, heading changes, mapped speed-limit exceedance, and sustained road offset when provider attribution is available. Sparse multi-minute direction reversals are marked low-confidence for route review, and off-road findings require consecutive moving points beyond a conservative offset threshold. The API data model also preserves evidence and confidence for extending wrong-way, mode-access, stop, and detour rules. Results are analytical indicators, not legal proof.
 
 ## Privacy and external services
 

@@ -24,7 +24,9 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
   useEffect(() => {
     if (!ref.current || !trip.points?.length) return;
     const coords = trip.points.map((p) => [p.lon, p.lat] as [number, number]);
-    const matchedCoords = (trip.matched_points || []).map((p) => [p.lon, p.lat] as [number, number]);
+    const matchedSegments = trip.matched_segments?.length
+      ? trip.matched_segments.map((segment) => segment.map((p) => [p.lon, p.lat] as [number, number]))
+      : [(trip.matched_points || []).map((p) => [p.lon, p.lat] as [number, number])];
     const referenceCoords = (trip.reference_points || []).map((p) => [p.lon, p.lat] as [number, number]);
     const map = new maplibregl.Map({
       container: ref.current,
@@ -58,10 +60,10 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
       });
       if (referenceCoords.length > 1) {
         map.addSource("reference", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: referenceCoords } } });
-        map.addLayer({ id: "reference", type: "line", source: "reference", paint: { "line-color": "#A78BFA", "line-width": 4, "line-opacity": 0.65 } });
+        map.addLayer({ id: "reference", type: "line", source: "reference", paint: { "line-color": "#A78BFA", "line-width": 2, "line-opacity": 0.4, "line-dasharray": [2, 3] } });
       }
-      if (matchedCoords.length > 1) {
-        map.addSource("matched", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: matchedCoords } } });
+      if (matchedSegments.some((segment) => segment.length > 1)) {
+        map.addSource("matched", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: matchedSegments.filter((segment) => segment.length > 1) } } });
         map.addLayer({ id: "matched", type: "line", source: "matched", paint: { "line-color": "#60A5FA", "line-width": 5, "line-opacity": 0.95 } });
       }
       const bounds = coords.reduce(
@@ -453,9 +455,9 @@ function App() {
               <div className="mapwrap">
                 <MapView trip={active} selected={selected} onSelect={setSelected} cursorIndex={cursorIndex} />
                 <div className="legend">
-                  <span className="raw">Raw GPX</span>
+                  <span className="raw">Recorded points</span>
                   <span className="match">Matched road</span>
-                  <span className="reference">Reference route</span>
+                  <span className="reference">Endpoint-only comparison</span>
                   <span className="anom">Anomaly</span>
                 </div>
               </div>

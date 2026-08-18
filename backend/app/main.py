@@ -31,7 +31,9 @@ def trip_dict(t, detail=False):
       "unit":f.unit,"title":f.title,"explanation":f.explanation,"evidence":f.evidence} for f in t.findings]}
     if detail:
         data["points"] = t.points_json
-        data["matched_points"] = decode_polyline((t.matched_json or {}).get("encoded"))
+        matched = t.matched_json or {}
+        data["matched_segments"] = [decode_polyline(encoded) for encoded in matched.get("segments", [])]
+        data["matched_points"] = [point for segment in data["matched_segments"] for point in segment] or decode_polyline(matched.get("encoded"))
         data["reference_points"] = decode_polyline((t.reference_json or {}).get("encoded"))
     return data
 
