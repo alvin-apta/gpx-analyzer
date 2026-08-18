@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "node generate.cjs"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}
