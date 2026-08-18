@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gpx
+      POSTGRES_USER: gpx
+      POSTGRES_PASSWORD: gpx
+    volumes: [gpx-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gpx"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment: &app-env
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://gpx:gpx@db:5432/gpx}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      VALHALLA_URL: ${VALHALLA_URL:-https://valhalla1.openstreetmap.de}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:14b}
+      UPLOAD_DIR: /data/uploads
+    volumes: [gpx-uploads:/data/uploads]
+    ports: ["8010:8000"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: python -m app.worker
+    environment: *app-env
+    volumes: [gpx-uploads:/data/uploads]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/dark}
+    restart: unless-stopped
+    ports: ["3010:80"]
+    depends_on: [api]
+volumes:
+  gpx-db:
+  gpx-uploads:
