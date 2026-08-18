@@ -1,13 +1,13 @@
 from pathlib import Path
-from app.gpx import parse_gpx, basic_metrics
+from app.gpx import parse_gpx, parse_vehicle_csv, basic_metrics
 from app.analysis import analyze
 
 def test_parse_and_analyze_sample():
     data = Path("samples/jakarta/mixed-car.gpx").read_bytes()
     name, points = parse_gpx(data)
     metrics = basic_metrics(points)
-    assert name == "Central Jakarta Mixed Demo"
-    assert len(points) == 7
+    assert name == "Central Jakarta Dense Road Demo"
+    assert len(points) > 100
     assert metrics["raw_distance_m"] > 1000
     assert metrics["max_speed_kmh"] > 140
     assert any(f["category"] == "impossible_speed" for f in analyze(points, "car"))
@@ -25,3 +25,16 @@ def test_missing_time_disables_speed_only():
     metrics=basic_metrics(points)
     assert metrics["raw_distance_m"] > 100
     assert metrics["max_speed_kmh"] is None
+
+def test_parse_vehicle_history_csv_uses_reported_speed_and_sorts_time():
+    data = """Tanggal,Plat Nomor,Jenis Kendaraan,Imei,Tipe Perangkat,Pengemudi,Garis Lintang,Garis Bujur,Lokasi,Geolokasi,Kecepatan (Km/Jam),ACC
+29 Jul 2026 10:05:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.2,106.8,Second,-,42.00,Nyala
+29 Jul 2026 10:00:00 WIB,B 1234 CD,Truck,1,Tracker,-,-6.21,106.79,First,-,20.00,Nyala
+""".encode()
+    name, points = parse_vehicle_csv(data)
+    metrics = basic_metrics(points)
+    assert name == "B 1234 CD — 29 Jul 2026"
+    assert points[0].location == "First"
+    assert points[0].time < points[1].time
+    assert points[1].speed_kmh == 42
+    assert metrics["max_speed_kmh"] == 42

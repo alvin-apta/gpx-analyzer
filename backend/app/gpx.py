@@ -1,6 +1,8 @@
+import csv
+import io
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from defusedxml import ElementTree as ET
 from pyproj import Geod
 
@@ -13,6 +15,48 @@ class Point:
     ele: float | None
     time: datetime | None
     segment: int
+    speed_kmh: float | None = None
+    location: str | None = None
+    ignition: str | None = None
+
+def parse_vehicle_csv(data: bytes) -> tuple[str | None, list[Point]]:
+    """Parse Indonesian vehicle-history CSV exports into chronological points."""
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try: text = data.decode("cp1252")
+        except UnicodeDecodeError as exc: raise ValueError("CSV must use UTF-8 or Windows-1252 encoding") from exc
+    try: rows = list(csv.DictReader(io.StringIO(text)))
+    except csv.Error as exc: raise ValueError(f"Invalid CSV: {exc}") from exc
+    required = {"Tanggal", "Garis Lintang", "Garis Bujur"}
+    headers = set(rows[0].keys()) if rows else set()
+    if not required.issubset(headers):
+        raise ValueError("CSV must contain Tanggal, Garis Lintang, and Garis Bujur columns")
+    points: list[Point] = []
+    for row_number, row in enumerate(rows, 2):
+        try: lat, lon = float(row["Garis Lintang"]), float(row["Garis Bujur"])
+        except (TypeError, ValueError): raise ValueError(f"CSV row {row_number} has invalid coordinates")
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError(f"CSV row {row_number} has coordinates outside valid bounds")
+        raw_time = (row.get("Tanggal") or "").strip()
+        try:
+            timestamp = datetime.strptime(raw_time.removesuffix(" WIB").strip(), "%d %b %Y %H:%M:%S").replace(tzinfo=timezone(timedelta(hours=7)))
+        except ValueError as exc: raise ValueError(f"CSV row {row_number} has an unsupported Tanggal value") from exc
+        raw_speed = (row.get("Kecepatan (Km/Jam)") or "").strip()
+        try: speed = float(raw_speed) if raw_speed and raw_speed != "-" else None
+        except ValueError: speed = None
+        points.append(Point(lat, lon, None, timestamp, 0, speed, (row.get("Lokasi") or "").strip() or None, (row.get("ACC") or "").strip() or None))
+    points.sort(key=lambda point: point.time or datetime.min.replace(tzinfo=timezone.utc))
+    if len(points) < 2: raise ValueError("CSV track must contain at least two valid points")
+    if len(points) > 250_000: raise ValueError("CSV exceeds the 250,000 point limit")
+    plate = next(((row.get("Plat Nomor") or "").strip() for row in rows if row.get("Plat Nomor")), "")
+    day = points[0].time.strftime("%d %b %Y") if points[0].time else ""
+    return " — ".join(value for value in (plate, day) if value) or "Vehicle history", points
+
+def parse_track(data: bytes, filename: str = "") -> tuple[str | None, list[Point]]:
+    if filename.lower().endswith(".csv") or not data.lstrip().startswith(b"<"):
+        return parse_vehicle_csv(data)
+    return parse_gpx(data)
 
 def parse_gpx(data: bytes) -> tuple[str | None, list[Point]]:
     try:
@@ -63,13 +107,14 @@ def angle_delta(a: float, b: float) -> float:
 
 def serialize(points: list[Point]) -> list[dict]:
     return [{"lat": p.lat, "lon": p.lon, "ele": p.ele,
-             "time": p.time.isoformat() if p.time else None, "segment": p.segment}
+             "time": p.time.isoformat() if p.time else None, "segment": p.segment,
+             "speed_kmh": p.speed_kmh, "location": p.location, "ignition": p.ignition}
             for p in points]
 
 def deserialize(data: list[dict]) -> list[Point]:
     return [Point(p["lat"], p["lon"], p.get("ele"),
                   datetime.fromisoformat(p["time"]) if p.get("time") else None,
-                  p.get("segment", 0)) for p in data]
+                  p.get("segment", 0), p.get("speed_kmh"), p.get("location"), p.get("ignition")) for p in data]
 
 def decode_polyline(encoded: str | None, precision: int = 6) -> list[dict]:
     """Decode Valhalla's encoded polyline into latitude/longitude objects."""
@@ -101,7 +146,7 @@ def basic_metrics(points: list[Point]) -> dict:
         d = distance_m(a, b) if a.segment == b.segment else 0
         total += d; distances.append(d); headings.append(bearing(a, b))
         dt = (b.time - a.time).total_seconds() if a.time and b.time else 0
-        speeds.append(d / dt * 3.6 if dt > 0 else None)
+        speeds.append(b.speed_kmh if b.speed_kmh is not None else (d / dt * 3.6 if dt > 0 else None))
     valid = [s for s in speeds if s is not None]
     duration = ((points[-1].time - points[0].time).total_seconds()
                 if points[0].time and points[-1].time else None)

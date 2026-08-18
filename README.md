@@ -1,6 +1,6 @@
 # GPX Inspector
 
-GPX Inspector is a dark-themed local web application for inspecting recorded movement against OpenStreetMap-derived road data. It calculates raw track metrics, requests map matching from Valhalla, flags deterministic anomalies, and exports PDF, CSV, and GeoJSON reports.
+GPX Inspector is a dark-themed local web application for inspecting GPX tracks and Indonesian vehicle-history CSV exports against OpenStreetMap-derived road data. It calculates raw track metrics, requests map matching from Valhalla, flags deterministic anomalies, and exports PDF, CSV, and GeoJSON reports.
 
 ![GPX Inspector mark](frontend/src/logo.svg)
 
@@ -25,7 +25,7 @@ No `.env` file is required. Copy `.env.example` to `.env` only to override defau
 
 ```mermaid
 flowchart LR
-  A[GPX upload] --> B[Secure parse and normalize]
+  A[GPX or vehicle CSV upload] --> B[Secure parse and normalize]
   B --> C[Raw distance, speed, bearing]
   B --> D[Hosted Valhalla map match]
   C --> E[Deterministic anomaly rules]

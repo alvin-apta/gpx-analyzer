@@ -12,6 +12,9 @@ const fmt = (n: number | null | undefined, unit = "") =>
   n == null
     ? "—"
     : `${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit}`;
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[character]!));
 const findingIcon = (category: string) => category.includes("speed") ? "S" : category.includes("acceleration") ? "+" : category.includes("braking") ? "−" : category.includes("direction") || category.includes("wrong_way") ? "↻" : category.includes("road") ? "!" : "•";
 function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; selected: Finding | null; onSelect: (finding: Finding) => void; cursorIndex: number | null }) {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -89,8 +92,8 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
     if (!map || cursorIndex == null || !trip.points?.[cursorIndex]) return;
     const point = trip.points[cursorIndex];
     const previous = cursorIndex > 0 ? trip.points[cursorIndex - 1] : null;
-    let speed: number | null = null;
-    if (previous?.time && point.time) {
+    let speed: number | null = point.speed_kmh ?? null;
+    if (speed == null && previous?.time && point.time) {
       const dt = (Date.parse(point.time) - Date.parse(previous.time)) / 1000;
       if (dt > 0) {
         const R = 6371e3, la1 = previous.lat * Math.PI / 180, la2 = point.lat * Math.PI / 180;
@@ -99,7 +102,7 @@ function MapView({ trip, selected, onSelect, cursorIndex }: { trip: Trip; select
         speed = 2 * R * Math.asin(Math.sqrt(a)) / dt * 3.6;
       }
     }
-    const html = `<strong>Track point ${cursorIndex + 1}</strong><br><span>${point.time ? new Date(point.time).toLocaleString() : "No timestamp"}${speed == null ? "" : `<br>${speed.toFixed(1)} km/h`}</span>`;
+    const html = `<strong>Track point ${cursorIndex + 1}</strong><br><span>${point.time ? new Date(point.time).toLocaleString() : "No timestamp"}${speed == null ? "" : `<br>${speed.toFixed(1)} km/h`}${point.location ? `<br>${escapeHtml(point.location)}` : ""}${point.ignition ? `<br>ACC: ${escapeHtml(point.ignition)}` : ""}</span>`;
     if (!cursorMarker.current) {
       const element = document.createElement("div"); element.className = "timeline-cursor";
       cursorMarker.current = new maplibregl.Marker({ element, anchor: "center" }).setPopup(new maplibregl.Popup({ offset: 16 }));
@@ -117,6 +120,7 @@ function Timeline({ trip, onPoint }: { trip: Trip; onPoint: (index: number) => v
     if (!ref.current || !trip.points) return;
     const chart = echarts.init(ref.current);
     const speeds = trip.points.map((p, i, a) => {
+      if (p.speed_kmh != null) return p.speed_kmh;
       if (!i || !p.time || !a[i - 1].time) return null;
       const dt = (Date.parse(p.time) - Date.parse(a[i - 1].time!)) / 1000;
       const R = 6371e3,
@@ -327,7 +331,7 @@ function App() {
           <>
             <header><div><span className="eyebrow">DOCUMENTATION</span><h1>How to use GPX Inspector</h1></div></header>
             <section className="guidegrid">
-              <article><span>01</span><div><h2>Upload a track</h2><p>Open Analysis, choose the correct transport mode, then upload a GPX file. Timestamps enable speed, acceleration, and braking checks.</p></div></article>
+              <article><span>01</span><div><h2>Upload a track</h2><p>Open Analysis, choose the correct transport mode, then upload a GPX or supported vehicle-history CSV. CSV-reported speed is preserved for analysis.</p></div></article>
               <article><span>02</span><div><h2>Wait for processing</h2><p>The worker calculates local metrics and asks Valhalla to match the coordinates against OpenStreetMap roads.</p></div></article>
               <article><span>03</span><div><h2>Read the map</h2><p>The cyan line is the recorded track. Colored icon points show where findings begin. Click an icon to select its evidence.</p></div></article>
               <article><span>04</span><div><h2>Interpret findings</h2><p>Severity describes impact while confidence describes evidence quality. Review values and thresholds before drawing conclusions.</p></div></article>
@@ -351,7 +355,7 @@ function App() {
         <header>
           <div>
             <span className="eyebrow">ANALYSIS WORKSPACE</span>
-            <h1>{active?.name || "Inspect a GPX track"}</h1>
+            <h1>{active?.name || "Inspect a vehicle track"}</h1>
           </div>
           <div className="upload">
             {active && (
@@ -366,10 +370,10 @@ function App() {
               <option>foot</option>
             </select>
             <label className="primary">
-              {busy ? "Working…" : "Upload GPX"}
+              {busy ? "Working…" : "Upload GPX / CSV"}
               <input
                 type="file"
-                accept=".gpx,application/gpx+xml"
+                accept=".gpx,.csv,application/gpx+xml,text/csv"
                 hidden
                 onChange={onFile}
               />
@@ -391,7 +395,7 @@ function App() {
             <img src={logo} />
             <h2>See movement differently.</h2>
             <p>
-              Upload a GPX file to compare its recorded path with OpenStreetMap
+              Upload a GPX file or Indonesian vehicle-history CSV to compare its recorded path with OpenStreetMap
               roads and reveal unusual movement.
             </p>
             <div className="steps">

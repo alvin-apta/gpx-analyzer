@@ -2,7 +2,7 @@ import asyncio
 from sqlalchemy import delete
 from .database import SessionLocal
 from .models import Trip, Finding
-from .gpx import parse_gpx, serialize, basic_metrics
+from .gpx import parse_track, serialize, basic_metrics
 from .analysis import analyze
 from .providers import valhalla_match, valhalla_reference
 
@@ -13,7 +13,7 @@ def process_trip(trip_id: str):
         trip.status = "processing"; db.commit()
         try:
             data = open(trip.source_path, "rb").read()
-            _, points = parse_gpx(data); metrics = basic_metrics(points)
+            _, points = parse_track(data, trip.source_path); metrics = basic_metrics(points)
             trip.points_json = serialize(points); trip.point_count = len(points)
             for key in ("raw_distance_m", "straight_distance_m", "duration_s", "max_speed_kmh"):
                 setattr(trip, key, metrics[key])

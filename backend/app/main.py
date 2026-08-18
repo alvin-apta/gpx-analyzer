@@ -10,7 +10,7 @@ from rq import Queue
 from .config import settings
 from .database import Base, engine, get_db
 from .models import Trip
-from .gpx import parse_gpx, decode_polyline
+from .gpx import parse_track, decode_polyline
 from .tasks import process_trip
 from .exports import csv_export, geojson_export, pdf_export
 from .providers import ollama_explain
@@ -47,10 +47,10 @@ async def upload(file:UploadFile=File(...),mode:str=Form(...),db:Session=Depends
     if mode not in ("car","motorcycle","bicycle","foot"): raise HTTPException(422,"Unsupported mode")
     data=await file.read(settings.max_upload_bytes+1)
     if len(data)>settings.max_upload_bytes: raise HTTPException(413,"File exceeds 50 MB")
-    try: gpx_name,_=parse_gpx(data)
+    try: track_name,_=parse_track(data, file.filename or "")
     except ValueError as exc: raise HTTPException(422,str(exc))
-    checksum=hashlib.sha256(data).hexdigest(); trip=Trip(name=gpx_name or file.filename or "Untitled trip",mode=mode,checksum=checksum,source_path="")
-    db.add(trip); db.flush(); path=settings.upload_dir/f"{trip.id}.gpx"; path.write_bytes(data); trip.source_path=str(path); db.commit()
+    checksum=hashlib.sha256(data).hexdigest(); trip=Trip(name=track_name or file.filename or "Untitled trip",mode=mode,checksum=checksum,source_path="")
+    db.add(trip); db.flush(); suffix=".csv" if (file.filename or "").lower().endswith(".csv") else ".gpx"; path=settings.upload_dir/f"{trip.id}{suffix}"; path.write_bytes(data); trip.source_path=str(path); db.commit()
     try: Queue("gpx",connection=Redis.from_url(settings.redis_url)).enqueue(process_trip,trip.id,job_timeout=300)
     except Exception: process_trip(trip.id)
     return {"id":trip.id,"status":"queued"}
